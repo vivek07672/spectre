@@ -1,10 +1,11 @@
-package volatileLRUcache
+package spectre
 
 import "fmt"
 import "hash/fnv"
 import "math/rand"
 import "strconv"
 import "sync"
+import "errors"
 
 var SHARD_COUNT int
 
@@ -66,33 +67,32 @@ func (c *Cache) CacheGet(key string)([]byte, bool){
 	return val, ok
 }
 
-func (c *Cache) CacheSet(key string, value []byte, size int) {
+func (c *Cache) CacheSet(key string, value []byte, size int) (bool, error){
 	if size > c.MaxSize{
-		panic("data size is more than max size")
+		return false, errors.New("data size is more than max size")
 	}
-	c.MakeSpace(key, size)
+	c.makeSpace(key, size)
 	sharedMap := c.Data.getShardMap(key)
 	sharedMap.Lock()
 	defer sharedMap.Unlock()
 	sharedMap.Items[key] = value
 	c.Size[key] = size
 	c.CurrentSize = c.CurrentSize + size
+	return true, nil
 }
 
-func (c *Cache)MakeSpace(key string, size int)  {
+func (c *Cache)makeSpace(key string, size int)  {
 	sharedMap := c.Data.getShardMap(key)
 	sharedMap.Lock()
-	defer sharedMap.Unlock()
 	_, ok := sharedMap.Items[key]
+	// remove the lock from current shared map
+	// to avoid deadloack condition
+	sharedMap.Unlock()
 	if !ok || c.Size[key] < size {
-		// remove the lock from current shared map
-		// to avoid deadloack condition
-		sharedMap.Unlock()
+
 		for c.CurrentSize + size > c.MaxSize{
 			c.deleteRandomKey()
 		}
-		// acquire the again to support the top defer message
-		sharedMap.Lock()
 	}
 }
 
@@ -134,9 +134,9 @@ func (c *Cache) IsSpaceAvaible(key string, size int) (bool) {
 	return retFlag
 }
 
-func (c *Cache) CacheSetOnly(key string, value []byte, size int) {
+func (c *Cache) CacheSetOnly(key string, value []byte, size int) (bool, error){
 	if size > c.MaxSize{
-		panic("data size is more than max size")
+		return false, errors.New("data size is more than max size")
 	}
 	sharedMap := c.Data.getShardMap(key)
 	sharedMap.Lock()
@@ -144,6 +144,7 @@ func (c *Cache) CacheSetOnly(key string, value []byte, size int) {
 	sharedMap.Items[key] = value
 	c.Size[key] = size
 	c.CurrentSize = c.CurrentSize + size
+	return true, nil
 }
 
 func (c *Cache)CacheDelete(key string)  {
