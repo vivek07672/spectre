@@ -2,7 +2,6 @@ package spectre
 
 import (
 	"fmt"
-	"cache"
 	"time"
 	"bytes"
 	"errors"
@@ -78,7 +77,7 @@ func (l *Link) add(temp *Link)  {
 }
 
 type VolatileLRUCache struct {
-	cache *cache.Cache
+	cache *Cache
 	root *Link
 	linkMap map[string]*Link
 	globalTTL time.Duration
@@ -159,7 +158,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value []byte,
 	//free memory from expired keys
 	vlruCache.RemoveVolatileKey()
 	success, error := vlruCache.cache.SetData(key, value, size)
-	if  !success && error == cache.LowSpaceError{
+	if  !success && error == LowSpaceError{
 		vlruCache.makeSpace()
 		success, error := vlruCache.cache.SetData(key, value, size)
 		if !success{
@@ -220,7 +219,7 @@ func (vlruCache *VolatileLRUCache)makeSpace() (bool, error){
 
 func GetVolatileLRUCache(cacheSize int, cachePartitions int, ttl time.Duration) *VolatileLRUCache {
 	newVolatileCache := &VolatileLRUCache{
-		cache: cache.GetDefaultCache(cacheSize, cachePartitions),
+		cache: GetDefaultCache(cacheSize, cachePartitions),
 		root: &Link{},
 		linkMap: make(map[string]*Link),
 	}
