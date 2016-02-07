@@ -145,6 +145,7 @@ func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan []
 
 func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool){
 	value, ok := vlruCache.cache.CacheGet(key)
+	fmt.Printf("cache value = %v error is = %v" , string(value), ok)
 	keyLink := vlruCache.linkMap[key]
 	if keyLink.isLinkTTLExpired(){
 		return nil, false
@@ -154,14 +155,17 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool)
 	return value, ok
 }
 
-func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value []byte, size int, keyExpire time.Duration) {
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value []byte, size int, keyExpire time.Duration) (bool, error){
 	//free memory from expired keys
 	vlruCache.RemoveVolatileKey()
-
-	if !vlruCache.cache.IsSpaceAvaible(key, size){
+	success, error := vlruCache.cache.SetData(key, value, size)
+	if  !success && error == cache.LowSpaceError{
 		vlruCache.makeSpace()
+		success, error := vlruCache.cache.SetData(key, value, size)
+		if !success{
+			return success, error
+		}
 	}
-	vlruCache.cache.CacheSetOnly(key, value, size)
 	link, ok := vlruCache.linkMap[key]
 	if !ok{
 		link = &Link{}
@@ -175,6 +179,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value []byte,
 	}
 	link.size = size
 	link.add(vlruCache.root)
+	return true, nil
 }
 
 func(vlruCache *VolatileLRUCache) RemoveVolatileKey() {
@@ -204,7 +209,7 @@ func (vlruCache *VolatileLRUCache)makeSpace() (bool, error){
 	// linkTBE means link to be evicted with its data(key, value) in cache
 	linkTBE := vlruCache.root.lruNext
 	if linkTBE == vlruCache.root{
-		return false, errors.New("TTLcache is empty ... May be the memory allocation is less")
+		return false, errors.New("volatileLRUcache is empty ... May be the memory is less")
 	}
 	key := linkTBE.key
 	vlruCache.cache.CacheDelete(key)
