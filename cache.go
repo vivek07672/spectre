@@ -1,6 +1,5 @@
 package spectre
 
-
 import (
 	"fmt"
 	"hash/fnv"
@@ -61,6 +60,7 @@ type Cache struct {
 	CurrentSize int
 	Size map[string]int
 	Data *CacheData
+	sync.RWMutex // for atomic CurrentSize modification
 }
 
 func (c *Cache) GetCurrentSize() int {
@@ -144,7 +144,7 @@ func (c *Cache) isSpaceAvaible(key string, size int) (bool) {
 			retFlag =  false
 		}
 	}else{
-		// consider a lock at cache level
+		// considered a lock at cache level
 		// to make thread safe
 		if size <= c.MaxSize - c.CurrentSize{
 			retFlag = true
@@ -155,7 +155,27 @@ func (c *Cache) isSpaceAvaible(key string, size int) (bool) {
 	return retFlag
 }
 
+func (c *Cache) isNewValueLarger(key string, size int) (bool) {
+	sharedMap := c.Data.getShardMap(key)
+	sharedMap.Lock()
+	defer sharedMap.Unlock()
+	_, ok := sharedMap.Items[key]
+	var retFlag bool
+	if ok && size > c.Size[key]{
+			retFlag =  true
+	}else{
+			retFlag = true
+	}
+	return retFlag
+}
+
 func (c *Cache) SetData(key string, value []byte, size int) (bool, error){
+	if c.isNewValueLarger(key, size){
+		// locking currentSize atomic lock
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	if size > c.MaxSize{
 		return false, SizeLimitError
 	}else if !c.isSpaceAvaible(key, size){
@@ -171,6 +191,8 @@ func (c *Cache) SetData(key string, value []byte, size int) (bool, error){
 }
 
 func (c *Cache)CacheDelete(key string)  {
+	c.Lock()
+	defer c.Unlock()
 	sharedMap := c.Data.getShardMap(key);
 	sharedMap.Lock()
 	defer sharedMap.Unlock()

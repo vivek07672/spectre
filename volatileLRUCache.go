@@ -146,7 +146,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool)
 	value, ok := vlruCache.cache.CacheGet(key)
 	fmt.Printf("cache value = %v error is = %v" , string(value), ok)
 	keyLink := vlruCache.linkMap[key]
-	if keyLink.isLinkTTLExpired(){
+	if !ok || keyLink.isLinkTTLExpired(){
 		return nil, false
 	}
 	keyLink.unlinkLRULink()
