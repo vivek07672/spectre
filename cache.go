@@ -51,6 +51,8 @@ type ThreadSafeMap struct {
 }
 
 func (tsm *ThreadSafeMap) String() string{
+	tsm.RLocker().Lock()
+	defer tsm.RLocker().Unlock()
 	return fmt.Sprintf("{currentsize:%v, data:%v}", len(tsm.Items), tsm.Items)
 }
 
@@ -64,6 +66,8 @@ type Cache struct {
 }
 
 func (c *Cache) GetCurrentSize() int {
+	c.RLocker().Lock()
+	defer c.RLocker().Unlock()
 	var totalSize int
 	for _, size := range c.Size{
 		totalSize = totalSize + size
@@ -73,27 +77,33 @@ func (c *Cache) GetCurrentSize() int {
 
 
 func (c *Cache)String() string {
+	c.RLocker().Lock()
+	defer c.RLocker().Unlock()
 	return fmt.Sprintf("{currentsize:%v, data:%v}", c.CurrentSize, c.Data)
 }
 
 
 func (c *Cache)CacheIterator(outputChannel chan map[string][]byte ) {
+	c.RLocker().Lock()
+	defer c.RLocker().Unlock()
 	for i := 0; i < SHARD_COUNT; i++ {
 		 outputChannel <- c.Data.MapList[i].Items
 	}
 }
 
 func (c *Cache) CacheGet(key string)([]byte, bool){
+	c.RLocker().Lock()
+	defer c.RLocker().Unlock()
 	sharedMap := c.Data.getShardMap(key)
-	sharedMap.Lock()
-	defer sharedMap.Unlock()
+	sharedMap.RLocker().Lock()
+	defer sharedMap.RLocker().Unlock()
 	val, ok := sharedMap.Items[key]
 	return val, ok
 }
 
 func (c *Cache) CacheSet(key string, value []byte, size int) (bool, error){
 	success, error := c.SetData(key, value, size)
-	if !success && error == LowSpaceError {
+	for error == LowSpaceError{
 		c.makeSpace(key, size)
 		success, error = c.SetData(key, value, size)
 	}
@@ -102,11 +112,11 @@ func (c *Cache) CacheSet(key string, value []byte, size int) (bool, error){
 
 func (c *Cache)makeSpace(key string, size int) (bool, error){
 	sharedMap := c.Data.getShardMap(key)
-	sharedMap.Lock()
+	sharedMap.RLocker().Lock()
 	_, ok := sharedMap.Items[key]
 	// remove the lock from current shared map
 	// to avoid deadloack condition
-	sharedMap.Unlock()
+	sharedMap.RLocker().Unlock()
 	if !ok || c.Size[key] < size {
 		for c.CurrentSize + size > c.MaxSize{
 			c.deleteRandomKey()
@@ -116,6 +126,8 @@ func (c *Cache)makeSpace(key string, size int) (bool, error){
 }
 
 func (c *Cache) deleteRandomKey()  {
+	c.Lock()
+	defer c.Unlock()
 	fmt.Printf("clearing space\n")
 	randomNumber := strconv.Itoa(rand.Int())
 	selectedMap := c.Data.getShardMap(randomNumber)
@@ -133,8 +145,8 @@ func (c *Cache) deleteRandomKey()  {
 
 func (c *Cache) isSpaceAvaible(key string, size int) (bool) {
 	sharedMap := c.Data.getShardMap(key)
-	sharedMap.Lock()
-	defer sharedMap.Unlock()
+	sharedMap.RLocker().Lock()
+	defer sharedMap.RLocker().Unlock()
 	_, ok := sharedMap.Items[key]
 	var retFlag bool
 	if ok{
@@ -170,12 +182,9 @@ func (c *Cache) isNewValueLarger(key string, size int) (bool) {
 }
 
 func (c *Cache) SetData(key string, value []byte, size int) (bool, error){
-	if c.isNewValueLarger(key, size){
-		// locking currentSize atomic lock
-		c.Lock()
-		defer c.Unlock()
-	}
-
+	// locking currentSize atomic lock
+	c.Lock()
+	defer c.Unlock()
 	if size > c.MaxSize{
 		return false, SizeLimitError
 	}else if !c.isSpaceAvaible(key, size){

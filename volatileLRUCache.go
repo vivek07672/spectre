@@ -5,11 +5,12 @@ import (
 	"time"
 	"bytes"
 	"errors"
+	"sync"
 )
 
-// link is a node in circular doubly linked list that stores information about the
+// Link is a node in circular doubly linked list that stores information about the
 // key usage and time to live
-// structure like :
+// structure is like :
 //
 //
 // link1 prev\				  /link2 next
@@ -81,13 +82,18 @@ type VolatileLRUCache struct {
 	root *Link
 	linkMap map[string]*Link
 	globalTTL time.Duration
+	sync.RWMutex // to make double linked list thread safe
 }
 
 func (vlruCache *VolatileLRUCache) GetCurrentSize() int {
+	vlruCache.RLocker().Lock()
+	defer vlruCache.RLocker().Unlock()
 	return vlruCache.cache.GetCurrentSize()
 }
 
 func  (vlruCache *VolatileLRUCache) String() string  {
+	vlruCache.RLocker().Lock()
+	defer vlruCache.RLocker().Unlock()
 	var buffer bytes.Buffer
 	buffer.WriteString(fmt.Sprintf("currentsize:%v\n", vlruCache.cache.CurrentSize))
 	buffer.WriteString(vlruCache.GetLRUInfo())
@@ -96,6 +102,8 @@ func  (vlruCache *VolatileLRUCache) String() string  {
 }
 
 func (vlruCache *VolatileLRUCache) GetLRUInfo() string {
+	vlruCache.RLocker().Lock()
+	defer vlruCache.RLocker().Unlock()
 	rootLink := vlruCache.root
 	startingLink := rootLink.lruNext
 	var keyList []string
@@ -113,6 +121,8 @@ func (vlruCache *VolatileLRUCache) GetLRUInfo() string {
 }
 
 func (vlruCache *VolatileLRUCache) GetTTLInfo() string {
+	vlruCache.RLocker().Lock()
+	defer vlruCache.RLocker().Unlock()
 	rootLink := vlruCache.root
 	startingLink := rootLink.ttlNext
 	var keyList []string
@@ -130,6 +140,8 @@ func (vlruCache *VolatileLRUCache) GetTTLInfo() string {
 }
 
 func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan []byte ) {
+	vlruCache.RLocker().Lock()
+	defer vlruCache.RLocker().Unlock()
 	rootLink := vlruCache.root
 	startingLink := rootLink.ttlNext
 	for ;startingLink != rootLink; {
@@ -145,6 +157,9 @@ func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan []
 func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool){
 	value, ok := vlruCache.cache.CacheGet(key)
 	fmt.Printf("cache value = %v error is = %v" , string(value), ok)
+	// changing the link so grabing write lock
+	vlruCache.Lock()
+	defer vlruCache.Unlock()
 	keyLink := vlruCache.linkMap[key]
 	if !ok || keyLink.isLinkTTLExpired(){
 		return nil, false
@@ -156,14 +171,16 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool)
 
 func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value []byte, size int, keyExpire time.Duration) (bool, error){
 	//free memory from expired keys
+	vlruCache.Lock()
+	defer vlruCache.Unlock()
 	vlruCache.RemoveVolatileKey()
 	success, error := vlruCache.cache.SetData(key, value, size)
-	if  !success && error == LowSpaceError{
+	for error == LowSpaceError{
 		vlruCache.makeSpace()
-		success, error := vlruCache.cache.SetData(key, value, size)
-		if !success{
-			return success, error
-		}
+		success, error = vlruCache.cache.SetData(key, value, size)
+	}
+	if !success{
+		return success, error
 	}
 	link, ok := vlruCache.linkMap[key]
 	if !ok{
@@ -196,6 +213,8 @@ func(vlruCache *VolatileLRUCache) RemoveVolatileKey() {
 }
 
 func (vlruCache *VolatileLRUCache)VolatileLRUCacheDelete(key string)  {
+	vlruCache.Lock()
+	defer vlruCache.Unlock()
 	vlruCache.RemoveVolatileKey()
 	vlruCache.cache.CacheDelete(key)
 	deletedLink := vlruCache.linkMap[key]
