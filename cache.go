@@ -43,9 +43,9 @@ func (c *CacheData) getShardMap(key string) *ThreadSafeMap {
 	return c.MapList[uint(hasher.Sum32())%uint(SHARD_COUNT)]
 }
 
-// A thread safe string to []byte map.
+// A thread safe string to interface{} map.
 type ThreadSafeMap struct {
-	Items        map[string][]byte
+	Items        map[string]interface{}
 	sync.RWMutex // Read Write mutex, guards access to internal map.
 	//sync.Mutex
 }
@@ -83,7 +83,7 @@ func (c *Cache)String() string {
 }
 
 
-func (c *Cache)CacheIterator(outputChannel chan map[string][]byte ) {
+func (c *Cache)CacheIterator(outputChannel chan map[string]interface{} ) {
 	c.RLocker().Lock()
 	defer c.RLocker().Unlock()
 	for i := 0; i < SHARD_COUNT; i++ {
@@ -91,7 +91,7 @@ func (c *Cache)CacheIterator(outputChannel chan map[string][]byte ) {
 	}
 }
 
-func (c *Cache) CacheGet(key string)([]byte, bool){
+func (c *Cache) CacheGet(key string)(interface{}, bool){
 	c.RLocker().Lock()
 	defer c.RLocker().Unlock()
 	sharedMap := c.Data.getShardMap(key)
@@ -101,7 +101,7 @@ func (c *Cache) CacheGet(key string)([]byte, bool){
 	return val, ok
 }
 
-func (c *Cache) CacheSet(key string, value []byte, size int) (bool, error){
+func (c *Cache) CacheSet(key string, value interface{}, size int) (bool, error){
 	success, error := c.SetData(key, value, size)
 	for error == LowSpaceError{
 		c.makeSpace(key, size)
@@ -181,7 +181,7 @@ func (c *Cache) isNewValueLarger(key string, size int) (bool) {
 	return retFlag
 }
 
-func (c *Cache) SetData(key string, value []byte, size int) (bool, error){
+func (c *Cache) SetData(key string, value interface{}, size int) (bool, error){
 	// locking currentSize atomic lock
 	c.Lock()
 	defer c.Unlock()
@@ -217,7 +217,7 @@ func GetDefaultCache(cacheSize int, cachePartitions int) *Cache {
 	}
 
 	for i := 0; i < cachePartitions; i++ {
-		newCache.Data.MapList[i] = &ThreadSafeMap{Items: make(map[string][]byte)}
+		newCache.Data.MapList[i] = &ThreadSafeMap{Items: make(map[string]interface{})}
 	}
 	newCache.MaxSize = cacheSize
 	SHARD_COUNT = cachePartitions

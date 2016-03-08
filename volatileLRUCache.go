@@ -139,7 +139,7 @@ func (vlruCache *VolatileLRUCache) GetTTLInfo() string {
 	return buffer.String()
 }
 
-func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan []byte ) {
+func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan interface{} ) {
 	vlruCache.RLocker().Lock()
 	defer vlruCache.RLocker().Unlock()
 	rootLink := vlruCache.root
@@ -154,9 +154,9 @@ func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan []
 	}
 }
 
-func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool){
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)(interface{}, bool){
 	value, ok := vlruCache.cache.CacheGet(key)
-	fmt.Printf("cache value = %v error is = %v" , string(value), ok)
+	fmt.Printf("cache value = %v error is = %v" , value, ok)
 	// changing the link so grabing write lock
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
@@ -169,7 +169,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)([]byte, bool)
 	return value, ok
 }
 
-func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value []byte, size int, keyExpire time.Duration) (bool, error){
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error){
 	//free memory from expired keys
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
