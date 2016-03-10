@@ -200,7 +200,6 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)(interface{}, 
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
 	keyLink := vlruCache.linkMap[key]
-	//fmt.Printf("exsting link was %v", keyLink)
 	if !ok || keyLink.isLinkTTLExpired(){
 		return nil, false
 	}
@@ -240,6 +239,8 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interfa
 	if !ok{
 		link = &Link{}
 		vlruCache.linkMap[key] = link
+	}else {
+		link.unlink()
 	}
 	link.key = key
 	if keyExpire.Seconds() <= 0{

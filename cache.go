@@ -108,7 +108,6 @@ type CacheRow struct{
 }
 
 func (c CacheRow)String() string {
-	fmt.Printf("name is vivek\n")
 	return fmt.Sprintf("cache row {key:%v, value:%v}", c.Key, c.Value)
 }
 
