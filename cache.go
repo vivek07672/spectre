@@ -16,7 +16,7 @@ var SHARD_COUNT int
 // caching the given value ,but the cache object is running out of memory.
 type lowSpaceError struct {
 	errorNumber int
-	problem string
+	problem     string
 }
 
 func (lse *lowSpaceError) Error() string {
@@ -27,17 +27,18 @@ func (lse *lowSpaceError) Error() string {
 // than the total memory allocated to the cache object.
 type sizeLimitError struct {
 	errorNumber int
-	problem string
+	problem     string
 }
 
 func (sle *sizeLimitError) Error() string {
 	return fmt.Sprintf("%d---%s", sle.errorNumber, sle.problem)
 }
+
 var (
 	// SizeLimitError returns when size of value is greater then total allocated memory
-	SizeLimitError = &sizeLimitError{problem:"data size is more than max size", errorNumber: 0}
+	SizeLimitError = &sizeLimitError{problem: "data size is more than max size", errorNumber: 0}
 	// LowSpaceError returns when size of the value is greater than current available space
-	LowSpaceError = &lowSpaceError{problem:"space not available", errorNumber: 1}
+	LowSpaceError = &lowSpaceError{problem: "space not available", errorNumber: 1}
 )
 
 // ThreadSafeMap is a thread string to interface{} map.
@@ -46,7 +47,7 @@ type ThreadSafeMap struct {
 	sync.RWMutex // Read Write mutex, guards access to internal map.
 }
 
-func (tsm *ThreadSafeMap) String() string{
+func (tsm *ThreadSafeMap) String() string {
 	tsm.RLocker().Lock()
 	defer tsm.RLocker().Unlock()
 	return fmt.Sprintf("{currentsize:%v, data:%v}", len(tsm.Items), tsm.Items)
@@ -54,7 +55,7 @@ func (tsm *ThreadSafeMap) String() string{
 
 // CacheData is list of threadsafe maps to participate in cache partition.
 type CacheData struct {
-	 MapList []*ThreadSafeMap
+	MapList []*ThreadSafeMap
 }
 
 // getShardMap returns the internal map which is supposed to keep the value
@@ -77,10 +78,10 @@ func (c *CacheData) getShardMap(key string) *ThreadSafeMap {
 // 				  storing the values
 //			sync.RWMutex: to ensure the thread safety for this structure
 type Cache struct {
-	MaxSize int
-	CurrentSize int
-	Size map[string]int
-	Data *CacheData
+	MaxSize      int
+	CurrentSize  int
+	Size         map[string]int
+	Data         *CacheData
 	sync.RWMutex // for atomic CurrentSize modification
 }
 
@@ -89,25 +90,25 @@ func (c *Cache) GetCurrentSize() int {
 	c.RLocker().Lock()
 	defer c.RLocker().Unlock()
 	var totalSize int
-	for _, size := range c.Size{
+	for _, size := range c.Size {
 		totalSize = totalSize + size
 	}
 	return totalSize
 }
 
-func (c *Cache)String() string {
+func (c *Cache) String() string {
 	c.RLocker().Lock()
 	defer c.RLocker().Unlock()
 	return fmt.Sprintf("{currentsize:%v, data:%v}", c.CurrentSize, c.Data)
 }
 
 // CacheRow is a entry in cache having structure like (key: value)
-type CacheRow struct{
-	Key string
+type CacheRow struct {
+	Key   string
 	Value interface{}
 }
 
-func (c CacheRow)String() string {
+func (c CacheRow) String() string {
 	return fmt.Sprintf("cache row {key:%v, value:%v}", c.Key, c.Value)
 }
 
@@ -115,14 +116,14 @@ func (c CacheRow)String() string {
 // input CacheRow channel. Calling goroutine  returns immediately after
 // spawning a gourtine. Spawned goroutine fills the channel with CacheRow.
 // When there is not any CacheRow left, spawned goroutine closes the channel.
-func (c *Cache)CacheIterator(outputChannel chan CacheRow) {
-	go func(){
+func (c *Cache) CacheIterator(outputChannel chan CacheRow) {
+	go func() {
 		c.RLocker().Lock()
 		defer c.RLocker().Unlock()
 		for i := 0; i < SHARD_COUNT; i++ {
-			for key, value := range c.Data.MapList[i].Items{
+			for key, value := range c.Data.MapList[i].Items {
 				temp := CacheRow{key, value}
-				outputChannel<- temp
+				outputChannel <- temp
 			}
 		}
 		close(outputChannel)
@@ -134,7 +135,7 @@ func (c *Cache)CacheIterator(outputChannel chan CacheRow) {
 // return values :
 //		ok: true if success else false
 //		val: value corresponding to the key
-func (c *Cache) CacheGet(key string)(interface{}, bool){
+func (c *Cache) CacheGet(key string) (interface{}, bool) {
 	c.RLocker().Lock()
 	defer c.RLocker().Unlock()
 	sharedMap := c.Data.getShardMap(key)
@@ -150,9 +151,9 @@ func (c *Cache) CacheGet(key string)(interface{}, bool){
 // return values :
 //		success: true if success else false
 //		error: error in the operation
-func (c *Cache) CacheSet(key string, value interface{}, size int) (bool, error){
+func (c *Cache) CacheSet(key string, value interface{}, size int) (bool, error) {
 	success, error := c.SetData(key, value, size)
-	for error == LowSpaceError{
+	for error == LowSpaceError {
 		c.makeSpace(key, size)
 		success, error = c.SetData(key, value, size)
 	}
@@ -164,7 +165,7 @@ func (c *Cache) CacheSet(key string, value interface{}, size int) (bool, error){
 // return values :
 //		success: true if success else false
 //		error: error in the operation
-func (c *Cache)makeSpace(key string, size int) (bool, error){
+func (c *Cache) makeSpace(key string, size int) (bool, error) {
 	sharedMap := c.Data.getShardMap(key)
 	sharedMap.RLocker().Lock()
 	_, ok := sharedMap.Items[key]
@@ -172,7 +173,7 @@ func (c *Cache)makeSpace(key string, size int) (bool, error){
 	// to avoid deadloack condition
 	sharedMap.RLocker().Unlock()
 	if !ok || c.Size[key] < size {
-		for c.CurrentSize + size > c.MaxSize{
+		for c.CurrentSize+size > c.MaxSize {
 			c.deleteRandomKey()
 		}
 	}
@@ -180,7 +181,7 @@ func (c *Cache)makeSpace(key string, size int) (bool, error){
 }
 
 // deleteRandomKey deletes a random key present in the cache.
-func (c *Cache) deleteRandomKey()  {
+func (c *Cache) deleteRandomKey() {
 	c.Lock()
 	defer c.Unlock()
 	fmt.Printf("clearing space\n")
@@ -202,40 +203,40 @@ func (c *Cache) deleteRandomKey()  {
 // space is available for the given key.
 // returns :
 //		retFlag: true if space is available else false
-func (c *Cache) isSpaceAvaible(key string, size int) (bool) {
+func (c *Cache) isSpaceAvaible(key string, size int) bool {
 	sharedMap := c.Data.getShardMap(key)
 	sharedMap.RLocker().Lock()
 	defer sharedMap.RLocker().Unlock()
 	_, ok := sharedMap.Items[key]
 	var retFlag bool
-	if ok{
-		if size <= c.Size[key]{
-			retFlag =  true
-		}else{
-			retFlag =  false
+	if ok {
+		if size <= c.Size[key] {
+			retFlag = true
+		} else {
+			retFlag = false
 		}
-	}else{
+	} else {
 		// considered a lock at cache level
 		// to make thread safe
-		if size <= c.MaxSize - c.CurrentSize{
+		if size <= c.MaxSize-c.CurrentSize {
 			retFlag = true
-		}else {
+		} else {
 			retFlag = false
 		}
 	}
 	return retFlag
 }
 
-func (c *Cache) isNewValueLarger(key string, size int) (bool) {
+func (c *Cache) isNewValueLarger(key string, size int) bool {
 	sharedMap := c.Data.getShardMap(key)
 	sharedMap.Lock()
 	defer sharedMap.Unlock()
 	_, ok := sharedMap.Items[key]
 	var retFlag bool
-	if ok && size > c.Size[key]{
-			retFlag =  true
-	}else{
-			retFlag = true
+	if ok && size > c.Size[key] {
+		retFlag = true
+	} else {
+		retFlag = true
 	}
 	return retFlag
 }
@@ -246,13 +247,13 @@ func (c *Cache) isNewValueLarger(key string, size int) (bool) {
 // returns :
 //		retFlag: true if space is available else false
 //		error: if any error in the operation else nil
-func (c *Cache) SetData(key string, value interface{}, size int) (bool, error){
+func (c *Cache) SetData(key string, value interface{}, size int) (bool, error) {
 	// locking currentSize atomic lock
 	c.Lock()
 	defer c.Unlock()
-	if size > c.MaxSize{
+	if size > c.MaxSize {
 		return false, SizeLimitError
-	}else if !c.isSpaceAvaible(key, size){
+	} else if !c.isSpaceAvaible(key, size) {
 		return false, LowSpaceError
 	}
 	sharedMap := c.Data.getShardMap(key)
@@ -265,10 +266,10 @@ func (c *Cache) SetData(key string, value interface{}, size int) (bool, error){
 }
 
 // CacheDelete deletes the key in the cache.
-func (c *Cache)CacheDelete(key string)  {
+func (c *Cache) CacheDelete(key string) {
 	c.Lock()
 	defer c.Unlock()
-	sharedMap := c.Data.getShardMap(key);
+	sharedMap := c.Data.getShardMap(key)
 	sharedMap.Lock()
 	defer sharedMap.Unlock()
 	delete(sharedMap.Items, key)
@@ -282,7 +283,7 @@ func (c *Cache)CacheDelete(key string)  {
 func GetDefaultCache(cacheSize int, cachePartitions int) *Cache {
 	SHARD_COUNT = cachePartitions
 	newCache := &Cache{
-		Data: &CacheData{MapList:make([]*ThreadSafeMap, SHARD_COUNT)},
+		Data: &CacheData{MapList: make([]*ThreadSafeMap, SHARD_COUNT)},
 		Size: make(map[string]int),
 	}
 

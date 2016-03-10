@@ -1,11 +1,11 @@
 package spectre
 
 import (
-	"fmt"
-	"time"
 	"bytes"
 	"errors"
+	"fmt"
 	"sync"
+	"time"
 )
 
 // Link is a node in circular doubly linked list that stores information about the
@@ -22,18 +22,18 @@ import (
 //				    ROOT
 //
 type Link struct {
-	key string
+	key        string
 	ExpireTime time.Time
-	size int
-	ttlPrev *Link
-	ttlNext *Link
-	lruPrev *Link
-	lruNext *Link
+	size       int
+	ttlPrev    *Link
+	ttlNext    *Link
+	lruPrev    *Link
+	lruNext    *Link
 }
 
 // isLinkTTLExpired tells in boolean about the key expiration.
 // true if expired or false.
-func (l *Link)isLinkTTLExpired()(bool)  {
+func (l *Link) isLinkTTLExpired() bool {
 	//fmt.Printf("current time= %v \n", time.Now())
 	//fmt.Printf("local time = %v \n", l.ExpireTime)
 	//fmt.Printf("local expired = %v \n", l.ExpireTime.Before(time.Now()))
@@ -42,7 +42,7 @@ func (l *Link)isLinkTTLExpired()(bool)  {
 
 // addLRULink adds a lru link in the circular doubly link list between root
 // and a node left of it.
-func (l *Link)addLRULink(temp *Link )  {
+func (l *Link) addLRULink(temp *Link) {
 	l.lruNext = temp
 	l.lruPrev = temp.lruPrev
 	temp.lruPrev.lruNext = l
@@ -51,7 +51,7 @@ func (l *Link)addLRULink(temp *Link )  {
 
 // addLRULink adds a ttl link in the circular doubly link list between root
 // and a node left of it.
-func (l *Link)addTTLLink(temp *Link )  {
+func (l *Link) addTTLLink(temp *Link) {
 	l.ttlNext = temp
 	l.ttlPrev = temp.ttlPrev
 	temp.ttlPrev.ttlNext = l
@@ -60,7 +60,7 @@ func (l *Link)addTTLLink(temp *Link )  {
 
 // unlinkLRULink unlinks the link from its lru pointers in the
 // doubly link list
-func (temp *Link) unlinkLRULink()  {
+func (temp *Link) unlinkLRULink() {
 	nextLink := temp.lruNext
 	prevLink := temp.lruPrev
 	nextLink.lruPrev = prevLink
@@ -69,7 +69,7 @@ func (temp *Link) unlinkLRULink()  {
 
 // unlinkTTLLink unlinks the link from its ttl pointers in the
 // doubly link list
-func (temp *Link) unlinkTTLLink()  {
+func (temp *Link) unlinkTTLLink() {
 	nextLink := temp.ttlNext
 	prevLink := temp.ttlPrev
 	nextLink.ttlPrev = prevLink
@@ -77,12 +77,13 @@ func (temp *Link) unlinkTTLLink()  {
 }
 
 // unlink removes a link in circular doubly link list.
-func (temp *Link) unlink()  {
+func (temp *Link) unlink() {
 	temp.unlinkLRULink()
 	temp.unlinkTTLLink()
 }
+
 // add insert a new link in circular doubly link list
-func (l *Link) add(temp *Link)  {
+func (l *Link) add(temp *Link) {
 	l.addLRULink(temp)
 	l.addTTLLink(temp)
 }
@@ -99,10 +100,10 @@ func (l *Link) add(temp *Link)  {
 // to have the meta data of the keys ready. Also this structure is
 // thread safe; meaning several goroutine can operate concurrently.
 type VolatileLRUCache struct {
-	cache *Cache
-	root *Link
-	linkMap map[string]*Link
-	globalTTL time.Duration
+	cache        *Cache
+	root         *Link
+	linkMap      map[string]*Link
+	globalTTL    time.Duration
 	sync.RWMutex // to make double linked list thread safe
 }
 
@@ -114,7 +115,7 @@ func (vlruCache *VolatileLRUCache) GetCurrentSize() int {
 	return vlruCache.cache.GetCurrentSize()
 }
 
-func  (vlruCache *VolatileLRUCache) String() string  {
+func (vlruCache *VolatileLRUCache) String() string {
 	vlruCache.RLocker().Lock()
 	defer vlruCache.RLocker().Unlock()
 	var buffer bytes.Buffer
@@ -131,14 +132,14 @@ func (vlruCache *VolatileLRUCache) GetLRUInfo() string {
 	rootLink := vlruCache.root
 	startingLink := rootLink.lruNext
 	var keyList []string
-	for ;startingLink != rootLink; {
+	for startingLink != rootLink {
 		keyList = append(keyList, startingLink.key)
 		nextLink := startingLink.lruNext
 		startingLink = nextLink
 	}
 	var buffer bytes.Buffer
 	buffer.WriteString(fmt.Sprintf("key order in lru fashion with old first stratgy\n"))
-	for i ,key := range keyList{
+	for i, key := range keyList {
 		buffer.WriteString(fmt.Sprintf("{position:%v, key:%v}\t", i, key))
 	}
 	return buffer.String()
@@ -151,31 +152,31 @@ func (vlruCache *VolatileLRUCache) GetTTLInfo() string {
 	rootLink := vlruCache.root
 	startingLink := rootLink.ttlNext
 	var keyList []string
-	for ;startingLink != rootLink; {
+	for startingLink != rootLink {
 		keyList = append(keyList, startingLink.key)
 		nextLink := startingLink.ttlNext
 		startingLink = nextLink
 	}
 	var buffer bytes.Buffer
 	buffer.WriteString(fmt.Sprintf("key order in ttl fashion with old first stratgy\n"))
-	for i ,key := range keyList{
+	for i, key := range keyList {
 		buffer.WriteString(fmt.Sprintf("{position:%v, key:%v}\t", i, key))
 	}
 	return buffer.String()
 }
 
-func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan CacheRow) {
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheIterator(outputChannel chan CacheRow) {
 	go func() {
 		vlruCache.RLocker().Lock()
 		defer vlruCache.RLocker().Unlock()
 		rootLink := vlruCache.root
 		// taking ttl pointer to start with the oldest key
 		startingLink := rootLink.ttlNext
-		for ;startingLink != rootLink; {
-			if !startingLink.isLinkTTLExpired(){
+		for startingLink != rootLink {
+			if !startingLink.isLinkTTLExpired() {
 				val, ok := vlruCache.cache.CacheGet(startingLink.key)
-				if ok{
-					outputChannel <- CacheRow{Key:startingLink.key, Value:val}
+				if ok {
+					outputChannel <- CacheRow{Key: startingLink.key, Value: val}
 				}
 			}
 			nextLink := startingLink.ttlNext
@@ -192,7 +193,7 @@ func (vlruCache *VolatileLRUCache)VolatileLRUCacheIterator(outputChannel chan Ca
 // return values :
 //		value: value corresponding to the key
 //		ok: true if success else false
-func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)(interface{}, bool){
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{}, bool) {
 	// lower level is thread safe so making write lock after this.
 	value, ok := vlruCache.cache.CacheGet(key)
 	//fmt.Printf("cache value = %v error is = %v" , value, ok)
@@ -200,7 +201,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)(interface{}, 
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
 	keyLink := vlruCache.linkMap[key]
-	if !ok || keyLink.isLinkTTLExpired(){
+	if !ok || keyLink.isLinkTTLExpired() {
 		return nil, false
 	}
 	keyLink.unlinkLRULink()
@@ -222,30 +223,30 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string)(interface{}, 
 // return values :
 //		ok: true if operation is successful else false
 //		error: error in case of occurred error else nil
-func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error){
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error) {
 	//free memory from expired keys
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
 	vlruCache.RemoveVolatileKey()
 	success, error := vlruCache.cache.SetData(key, value, size)
-	for error == LowSpaceError{
+	for error == LowSpaceError {
 		vlruCache.makeSpace()
 		success, error = vlruCache.cache.SetData(key, value, size)
 	}
-	if !success{
+	if !success {
 		return success, error
 	}
 	link, ok := vlruCache.linkMap[key]
-	if !ok{
+	if !ok {
 		link = &Link{}
 		vlruCache.linkMap[key] = link
-	}else {
+	} else {
 		link.unlink()
 	}
 	link.key = key
-	if keyExpire.Seconds() <= 0{
+	if keyExpire.Seconds() <= 0 {
 		link.ExpireTime = time.Now().Add(vlruCache.globalTTL)
-	}else{
+	} else {
 		link.ExpireTime = time.Now().Add(keyExpire)
 	}
 	link.size = size
@@ -254,10 +255,10 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interfa
 }
 
 // RemoveVolatileKey removes the keys which are already expired in VolatileLRUCache.
-func(vlruCache *VolatileLRUCache) RemoveVolatileKey() {
+func (vlruCache *VolatileLRUCache) RemoveVolatileKey() {
 	rootLink := vlruCache.root
 	startingLink := rootLink.ttlNext
-	for ;startingLink != rootLink && startingLink.isLinkTTLExpired(); {
+	for startingLink != rootLink && startingLink.isLinkTTLExpired() {
 		vlruCache.cache.CacheDelete(startingLink.key)
 		delete(vlruCache.linkMap, startingLink.key)
 		nextLink := startingLink.ttlNext
@@ -269,10 +270,10 @@ func(vlruCache *VolatileLRUCache) RemoveVolatileKey() {
 }
 
 // VolatileLRUCacheDelete deletes a key present in VolatileLRUCache.
-func (vlruCache *VolatileLRUCache)VolatileLRUCacheDelete(key string)  {
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheDelete(key string) {
 	// lower level is thread safe so making write lock after this.
 	_, ok := vlruCache.cache.CacheGet(key)
-	if ok{
+	if ok {
 		// changing the link so grabbing write lock
 		vlruCache.Lock()
 		defer vlruCache.Unlock()
@@ -288,11 +289,11 @@ func (vlruCache *VolatileLRUCache)VolatileLRUCacheDelete(key string)  {
 // return values :
 //		ok: true if operation is successful else false
 //		error: error in case of occurred error else nil
-func (vlruCache *VolatileLRUCache)makeSpace() (bool, error){
+func (vlruCache *VolatileLRUCache) makeSpace() (bool, error) {
 	fmt.Printf("clearing space in volatile cache\n")
 	// linkTBE means link to be evicted with its data(key, value) in cache
 	linkTBE := vlruCache.root.lruNext
-	if linkTBE == vlruCache.root{
+	if linkTBE == vlruCache.root {
 		return false, errors.New("VolatileLRUCache is empty ... May be the memory is less")
 	}
 	key := linkTBE.key
@@ -309,8 +310,8 @@ func (vlruCache *VolatileLRUCache)makeSpace() (bool, error){
 //			ttl: a global time duration for each key expiration.
 func GetVolatileLRUCache(cacheSize int, cachePartitions int, ttl time.Duration) *VolatileLRUCache {
 	newVolatileCache := &VolatileLRUCache{
-		cache: GetDefaultCache(cacheSize, cachePartitions),
-		root: &Link{},
+		cache:   GetDefaultCache(cacheSize, cachePartitions),
+		root:    &Link{},
 		linkMap: make(map[string]*Link),
 	}
 	//converting ttl to seconds for microseconds
