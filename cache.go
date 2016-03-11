@@ -41,27 +41,27 @@ var (
 	LowSpaceError = &lowSpaceError{problem: "space not available", errorNumber: 1}
 )
 
-// ThreadSafeMap is a thread string to interface{} map.
-type ThreadSafeMap struct {
+// threadSafeMap is a thread string to interface{} map.
+type threadSafeMap struct {
 	Items        map[string]interface{}
 	sync.RWMutex // Read Write mutex, guards access to internal map.
 }
 
-func (tsm *ThreadSafeMap) String() string {
+func (tsm *threadSafeMap) String() string {
 	tsm.RLocker().Lock()
 	defer tsm.RLocker().Unlock()
 	return fmt.Sprintf("{currentsize:%v, data:%v}", len(tsm.Items), tsm.Items)
 }
 
-// CacheData is list of threadsafe maps to participate in cache partition.
-type CacheData struct {
-	MapList []*ThreadSafeMap
+// cacheData is list of threadsafe maps to participate in cache partition.
+type cacheData struct {
+	MapList []*threadSafeMap
 }
 
 // getShardMap returns the internal map which is supposed to keep the value
 // for this key. This method internally uses hashing on the key and finds out
 // the internal cache map.
-func (c *CacheData) getShardMap(key string) *ThreadSafeMap {
+func (c *cacheData) getShardMap(key string) *threadSafeMap {
 	hasher := fnv.New32()
 	hasher.Write([]byte(key))
 	return c.MapList[uint(hasher.Sum32())%uint(SHARD_COUNT)]
@@ -74,14 +74,14 @@ func (c *CacheData) getShardMap(key string) *ThreadSafeMap {
 //			Size: a golang map to store the values size key wise.
 //				  this structure save the cpu cyclone to calculate he size
 // 				  many time
-//			Data: a pointer to the CacheData in which threadsafe maps are
+//			Data: a pointer to the cacheData in which threadsafe maps are
 // 				  storing the values
 //			sync.RWMutex: to ensure the thread safety for this structure
 type Cache struct {
 	MaxSize      int
 	CurrentSize  int
 	Size         map[string]int
-	Data         *CacheData
+	Data         *cacheData
 	sync.RWMutex // for atomic CurrentSize modification
 }
 
@@ -93,6 +93,7 @@ func (c *Cache) GetCurrentSize() int {
 	for _, size := range c.Size {
 		totalSize = totalSize + size
 	}
+
 	return totalSize
 }
 
@@ -184,7 +185,7 @@ func (c *Cache) makeSpace(key string, size int) (bool, error) {
 func (c *Cache) deleteRandomKey() {
 	c.Lock()
 	defer c.Unlock()
-	fmt.Printf("clearing space\n")
+	//fmt.Printf("clearing space\n")
 	randomNumber := strconv.Itoa(rand.Int())
 	selectedMap := c.Data.getShardMap(randomNumber)
 	selectedMap.Lock()
@@ -227,20 +228,6 @@ func (c *Cache) isSpaceAvaible(key string, size int) bool {
 	return retFlag
 }
 
-func (c *Cache) isNewValueLarger(key string, size int) bool {
-	sharedMap := c.Data.getShardMap(key)
-	sharedMap.Lock()
-	defer sharedMap.Unlock()
-	_, ok := sharedMap.Items[key]
-	var retFlag bool
-	if ok && size > c.Size[key] {
-		retFlag = true
-	} else {
-		retFlag = true
-	}
-	return retFlag
-}
-
 // SetData sets a key and its corresponding value in the cache.
 // This methods is responsible to set in the cache when there is other
 // algorithm is applied for key eviction in case of memory unavailability.
@@ -277,18 +264,29 @@ func (c *Cache) CacheDelete(key string) {
 	delete(c.Size, key)
 }
 
+// ClearCache clears all the keys in the cache.
+func (c *Cache) ClearCache() {
+	c.Lock()
+	defer c.Unlock()
+	c.CurrentSize = 0
+	c.Size = make(map[string]int)
+	for i := 0; i < SHARD_COUNT; i++ {
+		c.Data.MapList[i] = &threadSafeMap{Items: make(map[string]interface{})}
+	}
+}
+
 // GetDefaultCache returns the most abstract cache just using the
 // cap in memory limit . Cache is having algorithm to evict key when
 // space is not available in random selection.
 func GetDefaultCache(cacheSize int, cachePartitions int) *Cache {
 	SHARD_COUNT = cachePartitions
 	newCache := &Cache{
-		Data: &CacheData{MapList: make([]*ThreadSafeMap, SHARD_COUNT)},
+		Data: &cacheData{MapList: make([]*threadSafeMap, SHARD_COUNT)},
 		Size: make(map[string]int),
 	}
 
 	for i := 0; i < SHARD_COUNT; i++ {
-		newCache.Data.MapList[i] = &ThreadSafeMap{Items: make(map[string]interface{})}
+		newCache.Data.MapList[i] = &threadSafeMap{Items: make(map[string]interface{})}
 	}
 	newCache.MaxSize = cacheSize
 	return newCache

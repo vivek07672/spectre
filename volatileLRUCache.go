@@ -109,7 +109,7 @@ type VolatileLRUCache struct {
 
 // GetCurrentSize is a wrapper on top of Cache GetCurrentSize
 // which returns the current VolatileLRUCache size in bytes.
-func (vlruCache *VolatileLRUCache) GetCurrentSize() int {
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheCurrentSize() int {
 	vlruCache.RLocker().Lock()
 	defer vlruCache.RLocker().Unlock()
 	return vlruCache.cache.GetCurrentSize()
@@ -183,7 +183,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheIterator(outputChannel chan C
 			startingLink = nextLink
 		}
 		close(outputChannel)
-		fmt.Printf("spawaned go routine finishes")
+		//fmt.Printf("spawaned go routine finishes")
 	}()
 }
 
@@ -301,6 +301,19 @@ func (vlruCache *VolatileLRUCache) makeSpace() (bool, error) {
 	linkTBE.unlink()
 	delete(vlruCache.linkMap, key)
 	return true, nil
+}
+
+// VolatileLRUCacheClear clears all the keys in the cache.
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheClear() {
+	vlruCache.Lock()
+	defer vlruCache.Unlock()
+	vlruCache.cache.ClearCache()
+	vlruCache.root = &Link{}
+	vlruCache.linkMap = make(map[string]*Link)
+	vlruCache.root.lruNext = vlruCache.root
+	vlruCache.root.lruPrev = vlruCache.root
+	vlruCache.root.ttlNext = vlruCache.root
+	vlruCache.root.ttlPrev = vlruCache.root
 }
 
 // GetVolatileLRUCache returns an instance of VolatileLRUCache with the specified
