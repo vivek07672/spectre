@@ -119,6 +119,13 @@ func (c CacheRow) String() string {
 // When there is not any CacheRow left, spawned goroutine closes the channel.
 func (c *Cache) CacheIterator(outputChannel chan CacheRow) {
 	go func() {
+		//panic handlling at goroutine level
+		defer func() {
+			if r := recover(); r != nil {
+				close(outputChannel)
+			}
+		}()
+
 		c.RLocker().Lock()
 		defer c.RLocker().Unlock()
 		for i := 0; i < SHARD_COUNT; i++ {

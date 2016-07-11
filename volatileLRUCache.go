@@ -167,6 +167,13 @@ func (vlruCache *VolatileLRUCache) GetTTLInfo() string {
 
 func (vlruCache *VolatileLRUCache) VolatileLRUCacheIterator(outputChannel chan CacheRow) {
 	go func() {
+		//panic handlling at goroutine level
+		defer func() {
+			if r := recover(); r != nil {
+				close(outputChannel)
+			}
+		}()
+
 		vlruCache.RLocker().Lock()
 		defer vlruCache.RLocker().Unlock()
 		rootLink := vlruCache.root
@@ -280,8 +287,10 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheDelete(key string) {
 		vlruCache.RemoveVolatileKey()
 		vlruCache.cache.CacheDelete(key)
 		deletedLink := vlruCache.linkMap[key]
-		deletedLink.unlink()
-		delete(vlruCache.linkMap, key)
+		if deletedLink != nil {
+			deletedLink.unlink()
+			delete(vlruCache.linkMap, key)
+		}
 	}
 }
 
