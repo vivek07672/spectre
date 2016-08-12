@@ -311,15 +311,20 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheDelete(key string) {
 //		error: error in case of occurred error else nil
 func (vlruCache *VolatileLRUCache) makeSpace() (bool, error) {
 	fmt.Printf("clearing space in volatile cache\n")
-	// linkTBE means link to be evicted with its data(key, value) in cache
-	linkTBE := vlruCache.root.lruNext
-	if linkTBE == vlruCache.root {
-		return false, errors.New("VolatileLRUCache is empty ... May be the memory is less")
+	deleteCount := vlruCache.cache.MaxSize * 10 / 100
+	for deleteCount > 0 {
+
+		// linkTBE means link to be evicted with its data(key, value) in cache
+		linkTBE := vlruCache.root.lruNext
+		if linkTBE == vlruCache.root {
+			return false, errors.New("VolatileLRUCache is empty ... May be the memory is less")
+		}
+		key := linkTBE.key
+		vlruCache.cache.CacheDelete(key)
+		linkTBE.unlink()
+		delete(vlruCache.linkMap, key)
+		deleteCount = deleteCount - 1
 	}
-	key := linkTBE.key
-	vlruCache.cache.CacheDelete(key)
-	linkTBE.unlink()
-	delete(vlruCache.linkMap, key)
 	vlruCache.isMakingSpace = false
 	return true, nil
 }
