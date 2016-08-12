@@ -235,6 +235,12 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interfa
 	//free memory from expired keys
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
+
+	// Check here to avoid race condition with makeSpace()
+	if vlruCache.isMakingSpace {
+		return false, LowSpaceError
+	}
+
 	vlruCache.RemoveVolatileKey()
 	success, error := vlruCache.cache.SetData(key, value, size)
 	for error == LowSpaceError {
