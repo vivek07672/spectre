@@ -17,7 +17,9 @@ func TestVolatileLRUCacheCurrentSize(t *testing.T) {
 	VolatileLRUCacheTest.VolatileLRUCacheSet("ibibo", "ibibo", binary.Size([]byte("ibibo")), time.Duration(0))
 	size = size + binary.Size([]byte("spectre"))
 	VolatileLRUCacheTest.VolatileLRUCacheSet("spectre", "spectre", binary.Size([]byte("spectre")), time.Duration(0))
+	time.Sleep(1000000000)
 	returnedSize := VolatileLRUCacheTest.VolatileLRUCacheCurrentSize()
+
 	if returnedSize != size {
 		t.Fatalf("cache size calculation is incorrect")
 	}

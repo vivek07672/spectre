@@ -195,6 +195,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheIterator(outputChannel chan C
 	}()
 }
 
+
 // VolatileLRUCacheGet returns the value corresponding to a key present in Cache.
 // This also modify internal doubly link list to maintain the updated ttl and lru info
 // of the keys preset in Cache.
@@ -204,7 +205,6 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheIterator(outputChannel chan C
 func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{}, bool) {
 	// lower level is thread safe so making write lock after this.
 	value, ok := vlruCache.cache.CacheGet(key)
-	//fmt.Printf("cache value = %v error is = %v" , value, ok)
 	// changing the link so grabbing write lock
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
@@ -215,6 +215,11 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{},
 	keyLink.unlinkLRULink()
 	keyLink.addLRULink(vlruCache.root)
 	return value, ok
+}
+
+func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error) {
+	go vlruCache.goVolatileLRUCacheSet(key, value, size, keyExpire)
+	return true, nil
 }
 
 // VolatileLRUCacheSet sets the value corresponding to a key in Cache.
@@ -231,7 +236,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{},
 // return values :
 //		ok: true if operation is successful else false
 //		error: error in case of occurred error else nil
-func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error) {
+func (vlruCache *VolatileLRUCache) goVolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error) {
 	//free memory from expired keys
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
@@ -246,7 +251,7 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interfa
 	for error == LowSpaceError {
 		if !vlruCache.isMakingSpace {
 			vlruCache.isMakingSpace = true
-			go vlruCache.makeSpace()
+			vlruCache.makeSpace()
 		}
 		return false, error
 		// success, error = vlruCache.cache.SetData(key, value, size)
@@ -310,7 +315,6 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheDelete(key string) {
 //		ok: true if operation is successful else false
 //		error: error in case of occurred error else nil
 func (vlruCache *VolatileLRUCache) makeSpace() (bool, error) {
-	fmt.Printf("clearing space in volatile cache\n")
 	deleteCount := vlruCache.cache.MaxSize * 10 / 100
 	for deleteCount > 0 {
 
@@ -356,8 +360,6 @@ func GetVolatileLRUCache(cacheSize int, cachePartitions int, ttl time.Duration) 
 	//converting ttl to seconds for microseconds
 	ttl = ttl * time.Second
 	newVolatileCache.globalTTL = ttl
-	//fmt.Printf("global ttl  .... %v \n", newVolatileCache.globalTTL)
-	//fmt.Printf("current time.... %v \n", time.Now())
 	newVolatileCache.root.lruNext = newVolatileCache.root
 	newVolatileCache.root.lruPrev = newVolatileCache.root
 	newVolatileCache.root.ttlNext = newVolatileCache.root
