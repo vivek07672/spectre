@@ -218,6 +218,10 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{},
 }
 
 func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error) {
+	// Check here to avoid race condition with makeSpace()
+	if vlruCache.isMakingSpace {
+		return false, LowSpaceError
+	}
 	go vlruCache.goVolatileLRUCacheSet(key, value, size, keyExpire)
 	return true, nil
 }
@@ -237,11 +241,6 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interfa
 //		ok: true if operation is successful else false
 //		error: error in case of occurred error else nil
 func (vlruCache *VolatileLRUCache) goVolatileLRUCacheSet(key string, value interface{}, size int, keyExpire time.Duration) (bool, error) {
-	// Check here to avoid race condition with makeSpace()
-	if vlruCache.isMakingSpace {
-		return false, LowSpaceError
-	}
-
 	//free memory from expired keys
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
