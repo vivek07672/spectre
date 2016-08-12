@@ -100,11 +100,12 @@ func (l *Link) add(temp *Link) {
 // to have the meta data of the keys ready. Also this structure is
 // thread safe; meaning several goroutine can operate concurrently.
 type VolatileLRUCache struct {
-	cache        *Cache
-	root         *Link
-	linkMap      map[string]*Link
-	globalTTL    time.Duration
-	sync.RWMutex // to make double linked list thread safe
+	cache         *Cache
+	root          *Link
+	isMakingSpace bool
+	linkMap       map[string]*Link
+	globalTTL     time.Duration
+	sync.RWMutex  // to make double linked list thread safe
 }
 
 // GetCurrentSize is a wrapper on top of Cache GetCurrentSize
@@ -237,8 +238,12 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheSet(key string, value interfa
 	vlruCache.RemoveVolatileKey()
 	success, error := vlruCache.cache.SetData(key, value, size)
 	for error == LowSpaceError {
-		vlruCache.makeSpace()
-		success, error = vlruCache.cache.SetData(key, value, size)
+		if !vlruCache.isMakingSpace {
+			vlruCache.isMakingSpace = true
+			go vlruCache.makeSpace()
+		}
+		return false, error
+		// success, error = vlruCache.cache.SetData(key, value, size)
 	}
 	if !success {
 		return success, error
@@ -309,6 +314,7 @@ func (vlruCache *VolatileLRUCache) makeSpace() (bool, error) {
 	vlruCache.cache.CacheDelete(key)
 	linkTBE.unlink()
 	delete(vlruCache.linkMap, key)
+	vlruCache.isMakingSpace = false
 	return true, nil
 }
 
@@ -345,5 +351,6 @@ func GetVolatileLRUCache(cacheSize int, cachePartitions int, ttl time.Duration) 
 	newVolatileCache.root.lruPrev = newVolatileCache.root
 	newVolatileCache.root.ttlNext = newVolatileCache.root
 	newVolatileCache.root.ttlPrev = newVolatileCache.root
+	newVolatileCache.isMakingSpace = false
 	return newVolatileCache
 }
