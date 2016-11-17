@@ -212,12 +212,14 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{},
 	keyLink, linkOk := vlruCache.linkMap[key]
 	if !ok {
 		return nil, false
-	} else if linkOk && keyLink.isLinkTTLExpired(){
-		return nil, false
+	} else if linkOk {
+		if keyLink.isLinkTTLExpired() {
+			return nil, false
+		} else {
+			keyLink.unlinkLRULink()
+			keyLink.addLRULink(vlruCache.root)
+		}
 	}
-
-	keyLink.unlinkLRULink()
-	keyLink.addLRULink(vlruCache.root)
 	return value, ok
 }
 
