@@ -208,10 +208,14 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheGet(key string) (interface{},
 	// changing the link so grabbing write lock
 	vlruCache.Lock()
 	defer vlruCache.Unlock()
-	keyLink := vlruCache.linkMap[key]
-	if !ok || keyLink.isLinkTTLExpired() {
+
+	keyLink, linkOk := vlruCache.linkMap[key]
+	if !ok {
+		return nil, false
+	} else if linkOk && keyLink.isLinkTTLExpired(){
 		return nil, false
 	}
+
 	keyLink.unlinkLRULink()
 	keyLink.addLRULink(vlruCache.root)
 	return value, ok
