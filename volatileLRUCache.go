@@ -314,6 +314,11 @@ func (vlruCache *VolatileLRUCache) VolatileLRUCacheDelete(key string) {
 	}
 }
 
+func (vlruCache *VolatileLRUCache) VolatileLRUCachedKeys() (keySet []string) {
+	keySet = vlruCache.cache.CacheGetAllKeys()
+	return
+}
+
 // makeSpace frees the space with least recently key.
 // return values :
 //		ok: true if operation is successful else false
